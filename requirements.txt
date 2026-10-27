@@ -1,0 +1,3 @@
+textual
+requests
+html2text
