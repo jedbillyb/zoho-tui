@@ -139,3 +139,10 @@ class Zoho:
         if cc:
             payload["ccAddress"] = cc
         self._req("POST", self._acct(f"/messages/{message_id}"), json=payload)
+
+    def forward(self, message_id, to, subject, body, cc=""):
+        payload = {"fromAddress": self.from_address, "toAddress": to, "subject": subject,
+                   "content": body, "mailFormat": "plaintext", "action": "forward"}
+        if cc:
+            payload["ccAddress"] = cc
+        self._req("POST", self._acct(f"/messages/{message_id}"), json=payload)
