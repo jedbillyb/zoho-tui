@@ -23,7 +23,7 @@ Everything is on the keyboard. Press `?` in the app for this list.
 | `ctrl+d` / `ctrl+u` | Half page down / up |
 | `gg` / `G` | Top / bottom |
 | `n` / `N` | Next / previous unread |
-| `h` / `l`, `tab` | Switch pane (folders, list, message) |
+| `h` / `l`, left / right, `tab` | Switch pane (folders, list, message) |
 | `enter` | Open folder, or read the message full screen |
 | `esc` / `q` | Leave full screen or search results |
 | `space` / `b` | Scroll the message from the list |
@@ -47,4 +47,4 @@ In compose: `tab` moves between fields, `ctrl+e` edits the body in `$EDITOR`, `c
 
 Opening a message marks it read. The more of a folder you scroll, the more loads. Messages are sent as plain text. Attachments are flagged but not downloadable yet.
 
-The background uses the terminal's own, so it is transparent in foot. A wofi entry can run it with `foot --app-id=zoho-tui zoho`.
+It uses only the terminal's own colours and background, so it follows your palette and stays transparent in foot. Mouse input is off; status messages show in the bottom line. A wofi entry can run it with `foot --app-id=zoho-tui zoho`.

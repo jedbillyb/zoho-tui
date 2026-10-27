@@ -32,7 +32,7 @@ HELP = """\
   ctrl+d / ctrl+u  half page down / up
   gg / G           top / bottom
   n / N            next / previous unread
-  h / l, tab       switch pane (folders, list, message)
+  h / l, ←/→, tab  switch pane (folders, list, message)
   enter            open folder / read message full screen
   esc / q          leave full screen
   space / b        scroll message down / up (from the list)
@@ -293,22 +293,30 @@ class Reader(VerticalScroll):
 class ZohoApp(App):
     TITLE = "Zoho Mail"
     ENABLE_COMMAND_PALETTE = False
+    # Terminal colours only, so it follows whatever palette the terminal uses.
     CSS = """
     Screen { background: ansi_default; }
-    .pane { border: round $panel-lighten-2; background: ansi_default; border-title-color: $text-muted; }
-    .pane:focus, .pane:focus-within { border: round $accent; border-title-color: $accent; border-title-style: bold; }
+    .pane { border: round ansi_bright_black; background: ansi_default; border-title-color: ansi_bright_black; }
+    .pane.active { border: round ansi_white; border-title-color: ansi_white; border-title-style: bold; }
     #top { height: 45%; }
     #folders { width: 24; height: 1fr; }
     #messages { width: 1fr; height: 1fr; }
-    #reader { height: 1fr; padding: 0 1; }
-    #status { height: 1; padding: 0 1; color: $text-muted; background: ansi_default; }
+    #reader { height: 1fr; padding: 0 1; scrollbar-size-vertical: 1; }
+    * { scrollbar-background: ansi_default; scrollbar-background-hover: ansi_default; scrollbar-background-active: ansi_default;
+        scrollbar-color: ansi_bright_black; scrollbar-color-hover: ansi_bright_black; scrollbar-color-active: ansi_white; }
+    #status { height: 1; padding: 0 1; color: ansi_bright_black; background: ansi_default; }
     DataTable, OptionList { background: ansi_default; }
-    DataTable > .datatable--header { background: ansi_default; color: $text-muted; }
-    DataTable:focus > .datatable--cursor { background: $accent 40%; }
-    DataTable > .datatable--cursor { background: $panel-lighten-1; }
-    ModalScreen { align: center middle; background: $background 30%; }
-    .popup { border: round $accent; background: $surface; border-title-color: $accent; border-title-style: bold;
-             border-subtitle-color: $text-muted; padding: 0 1; }
+    DataTable > .datatable--header { background: ansi_default; color: ansi_bright_black; text-style: none; }
+    DataTable > .datatable--cursor, DataTable:focus > .datatable--cursor { background: ansi_bright_black; color: ansi_default; text-style: none; }
+    #messages.active > .datatable--cursor { background: ansi_white; color: ansi_black; }
+    OptionList > .option-list--option-highlighted, OptionList:focus > .option-list--option-highlighted
+        { background: ansi_bright_black; color: ansi_default; text-style: none; }
+    .active > .option-list--option-highlighted, .popup OptionList > .option-list--option-highlighted
+        { background: ansi_white; color: ansi_black; }
+    ModalScreen { align: center middle; background: transparent; }
+    .popup { border: round ansi_white; background: ansi_default; border-title-color: ansi_white; border-title-style: bold;
+             border-subtitle-color: ansi_bright_black; padding: 0 1; }
+    Input, TextArea { background: ansi_default; }
     #help { width: 64; height: 80%; }
     #picker { width: 50; height: 60%; }
     #picker Input, #searchbox Input { border: none; height: 1; padding: 0; margin-bottom: 1; }
@@ -316,9 +324,9 @@ class ZohoApp(App):
     #searchbox { width: 70; height: 3; }
     #compose { width: 90%; height: 90%; }
     #compose .field { height: 1; }
-    #compose .field Label { width: 9; color: $text-muted; }
+    #compose .field Label { width: 9; color: ansi_bright_black; }
     #compose .field Input { width: 1fr; }
-    #compose TextArea { height: 1fr; margin-top: 1; border-top: solid $panel-lighten-2; }
+    #compose TextArea { height: 1fr; margin-top: 1; border-top: solid ansi_bright_black; }
     """
     BINDINGS = [
         Binding("Q", "quit", "Quit"),
@@ -331,8 +339,8 @@ class ZohoApp(App):
         Binding("G,end", "bottom", show=False),
         Binding("home", "top", show=False),
         Binding("g", "g_prefix", show=False),
-        Binding("h,shift+tab", "pane(-1)", show=False),
-        Binding("l,tab", "pane(1)", show=False),
+        Binding("h,left,shift+tab", "pane(-1)", show=False),
+        Binding("l,right,tab", "pane(1)", show=False),
         Binding("space", "scroll_reader(1)", show=False),
         Binding("b", "scroll_reader(-1)", show=False),
         Binding("n", "next_unread(1)", show=False),
@@ -355,7 +363,6 @@ class ZohoApp(App):
 
     def __init__(self, zoho):
         super().__init__(ansi_color=True)  # keep the terminal's own (transparent) background
-        self.theme = "dracula"
         self.zoho = zoho
         self.folder = None        # current folder dict, None while showing search results
         self.view_name = ""
@@ -392,18 +399,43 @@ class ZohoApp(App):
         self.set_interval(REFRESH_SECONDS, self.background_refresh)
         self.update_status()
 
+    def on_descendant_focus(self, event):
+        # Track the active pane with a class instead of :focus, which Textual clears
+        # whenever the terminal window loses focus (e.g. the mouse leaving it).
+        if event.widget.id in self.PANES:
+            for pid in self.PANES:
+                self.query_one("#" + pid).set_class(pid == event.widget.id, "active")
+
     # ---- status line ----------------------------------------------------
 
-    def update_status(self, extra=""):
+    def notify(self, message, *, title="", severity="information", timeout=None, markup=True):
+        """Show messages in the status line instead of Textual's toast popups."""
+        self.flash_id = getattr(self, "flash_id", 0) + 1
+        self.flash = (Text(str(message)).markup, severity)
+        self.update_status()
+        token = self.flash_id
+        self.set_timer(timeout or (6 if severity == "error" else 3), lambda: self._clear_flash(token))
+
+    def _clear_flash(self, token):
+        if token == self.flash_id:
+            self.flash = None
+            self.update_status()
+
+    def update_status(self):
         parts = [f"[b]{self.zoho.from_address}[/b]", self.view_name or "…"]
         if self.rows:
             unread = sum(is_unread(m) for m in self.rows.values())
             parts.append(f"{len(self.rows)}{'+' if self.more else ''} messages, {unread} unread")
         if self.g_pending:
             parts.append("[reverse] g- [/reverse]")
-        if extra:
-            parts.append(extra)
-        self.query_one("#status", Static).update("  ·  ".join(parts) + "  ·  [dim]? help[/dim]")
+        flash = getattr(self, "flash", None)
+        if flash:
+            msg, severity = flash
+            color = {"error": "ansi_red", "warning": "ansi_yellow"}.get(severity, "ansi_default")
+            parts.append(f"[{color}]{msg}[/]")
+        else:
+            parts.append("? help")
+        self.query_one("#status", Static).update("  ·  ".join(parts))
 
     # ---- key gating -------------------------------------------------------
 
@@ -454,7 +486,7 @@ class ZohoApp(App):
         ol.clear_options()
         for f in folders:
             unread = int(f.get("unreadCount") or 0)
-            label = f"{f['folderName']}  [b magenta]{unread}[/]" if unread else f["folderName"]
+            label = f"{f['folderName']}  [b]({unread})[/b]" if unread else f["folderName"]
             ol.add_option(Option(label, id=f["folderId"]))
         if initial:
             self.goto_folder("Inbox")
@@ -483,7 +515,7 @@ class ZohoApp(App):
         items = []
         for f in self.zoho.folders():
             unread = int(f.get("unreadCount") or 0)
-            items.append((f["folderId"], f"{f['folderName']}  [b]{unread}[/b]" if unread else f["folderName"]))
+            items.append((f["folderId"], f"{f['folderName']}  [b]({unread})[/b]" if unread else f["folderName"]))
         self.push_screen(PickerScreen("Go to folder", items), lambda fid: fid and self.goto_folder(fid))
 
     # ---- message list -----------------------------------------------------
@@ -532,7 +564,7 @@ class ZohoApp(App):
 
     def _row(self, m):
         style = "bold" if is_unread(m) else ""
-        mark = Text("★", style="yellow") if is_flagged(m) else Text("•", style="bold magenta") if is_unread(m) else Text("")
+        mark = Text("★", style="yellow") if is_flagged(m) else Text("•", style="bold") if is_unread(m) else Text("")
         sender = m.get("sender") or m.get("fromAddress", "")
         return (mark, Text(sender, style=style, overflow="ellipsis", no_wrap=True),
                 Text(m.get("subject") or "(no subject)", style=style, no_wrap=True, overflow="ellipsis"),
@@ -607,9 +639,9 @@ class ZohoApp(App):
         for label, key in (("From", "fromAddress"), ("To", "toAddress"), ("Cc", "ccAddress")):
             val = details.get(key)
             if val and val != "Not Provided":
-                head.append(f"{label:<8}", style="bold magenta")
+                head.append(f"{label:<8}", style="bold")
                 head.append(html_to_text(val).replace("\n", " ") + "\n")
-        head.append(f"{'Date':<8}", style="bold magenta")
+        head.append(f"{'Date':<8}", style="bold")
         try:
             head.append(datetime.fromtimestamp(int(details["receivedTime"]) / 1000).strftime("%a %d %b %Y %H:%M") + "\n")
         except (KeyError, ValueError, TypeError):
@@ -908,4 +940,4 @@ def main():
         sys.exit(f"zoho-tui: {e}")
     except Exception as e:
         sys.exit(f"zoho-tui: could not connect: {e}")
-    ZohoApp(zoho).run()
+    ZohoApp(zoho).run(mouse=False)
