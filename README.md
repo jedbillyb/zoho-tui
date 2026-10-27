@@ -1,6 +1,8 @@
 # zoho-tui
 
-Terminal client for Zoho Mail, built on the Zoho Mail REST API and Textual.
+Keyboard-driven terminal client for Zoho Mail, built on the Zoho Mail REST API and Textual.
+
+![zoho-tui](docs/screenshot.png)
 
 ## Install
 
@@ -29,7 +31,7 @@ Everything is on the keyboard. Press `?` in the app for this list.
 | `space` / `b` | Scroll the message from the list |
 | `gi` `gs` `gd` `ga` `gt` `gj` | Inbox, Sent, Drafts, Archive, Trash, Spam |
 | `gf` | Folder picker (type to filter) |
-| `/` | Search (`invoice`, `from:bob`, `subject:hi`) |
+| `/` | Search |
 | `c` | Compose |
 | `r` / `R` | Reply / reply all |
 | `F` | Forward |
@@ -43,8 +45,14 @@ Everything is on the keyboard. Press `?` in the app for this list.
 | `ctrl+r` | Refresh (also runs every 60s) |
 | `Q` | Quit |
 
+Search matches the start of every word you type, across all folders: `ortho appoint` finds "Orthodontist appointments". Zoho's own syntax (`sender:bob`, `subject:invoice*`, `::` for AND) is passed through untouched when the query contains a `:`.
+
 In compose: `tab` moves between fields, `ctrl+e` edits the body in `$EDITOR`, `ctrl+s` sends, `esc` cancels (twice if you've typed something).
 
 Opening a message marks it read. The more of a folder you scroll, the more loads. Messages are sent as plain text. Attachments are flagged but not downloadable yet.
 
 It uses only the terminal's own colours and background, so it follows your palette and stays transparent in foot. Mouse input is off; status messages show in the bottom line. A wofi entry can run it with `foot --app-id=zoho-tui zoho`.
+
+## License
+
+MIT

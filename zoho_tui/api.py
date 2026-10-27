@@ -1,5 +1,6 @@
 """Thin Zoho Mail REST client."""
 import os
+import re
 import time
 from pathlib import Path
 
@@ -98,8 +99,11 @@ class Zoho:
                          params={"folderId": folder_id, "start": start, "limit": limit}) or []
 
     def search(self, query, limit=50):
+        # Zoho only matches whole words, so plain queries become prefix matches on
+        # every word, ANDed: "ortho appointment" -> entire:ortho*::entire:appointment*
         if ":" not in query:
-            query = f"entire:{query}"
+            words = re.findall(r"[\w@.'-]+", query)
+            query = "::".join(f"entire:{w}*" for w in words) or query
         return self._req("GET", self._acct("/messages/search"),
                          params={"searchKey": query, "limit": limit}) or []
 

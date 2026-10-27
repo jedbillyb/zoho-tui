@@ -7,6 +7,8 @@ import tempfile
 import time
 from datetime import datetime
 
+import html
+
 import html2text
 from rich.text import Text
 from textual import on, work
@@ -40,7 +42,7 @@ HELP = """\
 [b]Go to[/b]
   gi gs gd ga gt gj  Inbox, Sent, Drafts, Archive, Trash, Spam
   gf               folder picker
-  /                search (from:bob, subject:hi, plain words)
+  /                search (word prefixes, or Zoho syntax like sender:bob)
 
 [b]Act[/b]
   c                compose
@@ -317,6 +319,7 @@ class ZohoApp(App):
     .popup { border: round ansi_white; background: ansi_default; border-title-color: ansi_white; border-title-style: bold;
              border-subtitle-color: ansi_bright_black; padding: 0 1; }
     Input, TextArea { background: ansi_default; }
+    LoadingIndicator { background: ansi_default; color: ansi_white; }
     #help { width: 64; height: 80%; }
     #picker { width: 50; height: 60%; }
     #picker Input, #searchbox Input { border: none; height: 1; padding: 0; margin-bottom: 1; }
@@ -523,21 +526,38 @@ class ZohoApp(App):
     @work(thread=True, exclusive=True, group="messages")
     def load_messages(self, keep_cursor=False):
         folder = self.folder
+        if not keep_cursor:
+            self.call_from_thread(setattr, self.query_one(DataTable), "loading", True)
         try:
             msgs = self.zoho.messages(folder["folderId"], limit=PAGE_SIZE)
         except ZohoError as e:
+            self.call_from_thread(setattr, self.query_one(DataTable), "loading", False)
             self.call_from_thread(self.notify, str(e), severity="error")
             return
+        self.call_from_thread(setattr, self.query_one(DataTable), "loading", False)
         self.call_from_thread(self._show_messages, msgs, folder["folderName"], keep_cursor, len(msgs) == PAGE_SIZE)
 
     @work(thread=True, exclusive=True, group="messages")
     def run_search(self, query):
+        self.call_from_thread(self._set_loading, True, f"Searching for “{query}”…")
+        start = time.monotonic()
         try:
             msgs = self.zoho.search(query, limit=PAGE_SIZE)
         except ZohoError as e:
-            self.call_from_thread(self.notify, str(e), severity="error")
+            self.call_from_thread(self._set_loading, False)
+            self.call_from_thread(self.notify, f"Search failed: {e}", severity="error")
             return
+        self.call_from_thread(self._set_loading, False)
         self.call_from_thread(self._show_messages, msgs, f"Search: {query}", False, False)
+        n = len(msgs)
+        found = f"{n}{'+' if n == PAGE_SIZE else ''} result{'s' if n != 1 else ''}" if n else "No results"
+        self.call_from_thread(self.notify, f"{found} for “{query}” ({time.monotonic() - start:.1f}s)",
+                              severity="information" if n else "warning", timeout=5)
+
+    def _set_loading(self, on_, message=""):
+        self.query_one(DataTable).loading = on_
+        if on_:
+            self.notify(message, timeout=60)
 
     @work(thread=True, group="more")
     def load_more(self):
@@ -565,9 +585,9 @@ class ZohoApp(App):
     def _row(self, m):
         style = "bold" if is_unread(m) else ""
         mark = Text("★", style="yellow") if is_flagged(m) else Text("•", style="bold") if is_unread(m) else Text("")
-        sender = m.get("sender") or m.get("fromAddress", "")
+        sender = html.unescape(m.get("sender") or m.get("fromAddress", ""))
         return (mark, Text(sender, style=style, overflow="ellipsis", no_wrap=True),
-                Text(m.get("subject") or "(no subject)", style=style, no_wrap=True, overflow="ellipsis"),
+                Text(html.unescape(m.get("subject") or "(no subject)"), style=style, no_wrap=True, overflow="ellipsis"),
                 Text(fmt_time(m.get("receivedTime")), style=style or "dim"))
 
     def _show_messages(self, msgs, title, keep_cursor, more):
@@ -653,7 +673,7 @@ class ZohoApp(App):
         self.query_one("#body", Static).update(head)
         reader = self.query_one("#reader")
         reader.scroll_home(animate=False)
-        reader.border_title = Text(details.get("subject") or "(no subject)").markup
+        reader.border_title = Text(html.unescape(details.get("subject") or "(no subject)")).markup
         if is_unread(m):
             self.set_read(m, True, quiet=True)
 
@@ -898,7 +918,7 @@ class ZohoApp(App):
             mine = self.zoho.from_address.lower()
             others = addresses(details.get("toAddress")) + addresses(details.get("ccAddress"))
             cc = ", ".join(a for a in dict.fromkeys(others) if a.lower() != mine and a not in sender)
-        subject = details.get("subject") or ""
+        subject = html.unescape(details.get("subject") or "")
         if not subject.lower().startswith("re:"):
             subject = f"Re: {subject}"
         self.push_screen(
@@ -910,12 +930,12 @@ class ZohoApp(App):
         if not self.open_msg:
             return
         m, details, body = self.open_msg
-        subject = details.get("subject") or ""
+        subject = html.unescape(details.get("subject") or "")
         if not subject.lower().startswith("fwd:"):
             subject = f"Fwd: {subject}"
         fwd = (f"\n\n---------- Forwarded message ----------\n"
                f"From: {', '.join(addresses(details.get('fromAddress')))}\n"
-               f"Subject: {details.get('subject') or ''}\n\n{body}\n")
+               f"Subject: {html.unescape(details.get('subject') or '')}\n\n{body}\n")
         self.push_screen(ComposeScreen("", "", subject, fwd, title="Forward"),
                          lambda r: r and self._send("forward", m, r))
 
