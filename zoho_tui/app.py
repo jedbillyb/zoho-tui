@@ -536,6 +536,12 @@ class ZohoApp(App):
             return
         self.call_from_thread(setattr, self.query_one(DataTable), "loading", False)
         self.call_from_thread(self._show_messages, msgs, folder["folderName"], keep_cursor, len(msgs) == PAGE_SIZE)
+        self.call_from_thread(self._refocus)
+
+    def _refocus(self):
+        # A loading DataTable refuses focus, so the focus() in goto_folder can leave nothing focused.
+        if self.focused is None and not self.screen.maximized:
+            self.query_one(DataTable).focus()
 
     @work(thread=True, exclusive=True, group="messages")
     def run_search(self, query):
