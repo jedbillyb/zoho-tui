@@ -302,7 +302,7 @@ class ZohoApp(App):
     .pane.active { border: round ansi_white; border-title-color: ansi_white; border-title-style: bold; }
     #top { height: 45%; }
     #folders { width: 24; height: 1fr; }
-    #messages { width: 1fr; height: 1fr; }
+    #messages { width: 1fr; height: 1fr; overflow-x: hidden; }  /* sideways scroll would swallow left/right */
     #reader { height: 1fr; padding: 0 1; scrollbar-size-vertical: 1; }
     * { scrollbar-background: ansi_default; scrollbar-background-hover: ansi_default; scrollbar-background-active: ansi_default;
         scrollbar-color: ansi_bright_black; scrollbar-color-hover: ansi_bright_black; scrollbar-color-active: ansi_white; }
