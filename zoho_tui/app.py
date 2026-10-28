@@ -34,7 +34,7 @@ HELP = """\
   ctrl+d / ctrl+u  half page down / up
   gg / G           top / bottom
   n / N            next / previous unread
-  h / l, ←/→, tab  switch pane (folders, list, message)
+  h / l, ←/→, tab  switch pane; right on a folder opens it
   enter            open folder / read message full screen
   esc / q          leave full screen
   space / b        scroll message down / up (from the list)
@@ -686,6 +686,13 @@ class ZohoApp(App):
             return
         fid = self.focused.id if self.focused else "messages"
         cur = self.PANES.index(fid) if fid in self.PANES else 1
+        if fid == "folders" and d == 1:
+            ol = self.query_one("#folders", OptionList)
+            if ol.highlighted is not None:
+                opt = ol.get_option_at_index(ol.highlighted)
+                if not self.folder or opt.id != self.folder["folderId"]:
+                    self.goto_folder(opt.id)
+                    return
         self.query_one("#" + self.PANES[(cur + d) % 3]).focus()
 
     def action_move(self, d):

@@ -25,7 +25,7 @@ Everything is on the keyboard. Press `?` in the app for this list.
 | `ctrl+d` / `ctrl+u` | Half page down / up |
 | `gg` / `G` | Top / bottom |
 | `n` / `N` | Next / previous unread |
-| `h` / `l`, left / right, `tab` | Switch pane (folders, list, message) |
+| `h` / `l`, left / right, `tab` | Switch pane (folders, list, message); right on a folder opens it |
 | `enter` | Open folder, or read the message full screen |
 | `esc` / `q` | Leave full screen or search results |
 | `space` / `b` | Scroll the message from the list |
